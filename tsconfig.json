@@ -1,0 +1,52 @@
+{
+  "compilerOptions": {
+    /* Project Structure and Output */
+    "rootDir": "./src",                    // Compile files in src (including generated)
+    "outDir": "./dist",  
+    "allowJs": true,                 // Output compiled files to dist
+    "removeComments": true,               // Strip comments from output
+    "sourceMap": true,                    // Generate source maps for debugging
+    "declaration": true,                  // Generate .d.ts files for types
+    "declarationMap": true,               // Generate source maps for .d.ts files
+
+    /* Modern Module and Target Setup */
+    "target": "ES2022",                   // Target modern JS features
+    "module": "NodeNext",                 // Use Node's built-in ES Module resolution (MANDATORY for Node ESM)
+    "moduleResolution": "NodeNext",       // Use Node's built-in ES Module resolution (MANDATORY for Node ESM)
+    "lib": ["ES2022"],                    // Include standard library features
+    "resolveJsonModule": true,            // Allow importing JSON files
+
+    /* Interop and Consistency */
+    "esModuleInterop": true,              // Enables compatibility for default imports from CommonJS modules
+    "forceConsistentCasingInFileNames": true, // Ensure consistent file naming
+    
+    /* Strict Type Checking (Best of the First Config) */
+    "strict": true,                       // Enables all 'strict' family options below
+    "noImplicitAny": true,                // Disallow implicit 'any' types
+    "strictNullChecks": true,             // Check for null/undefined
+    "strictFunctionTypes": true,          // Stricter checking for function types
+    "strictBindCallApply": true,          // Stricter checking for bind/call/apply
+    "strictPropertyInitialization": true, // Ensure class properties are initialized
+    "noImplicitThis": true,               // Disallow implicit 'this'
+    "alwaysStrict": true,                 // Emit 'use strict' at the beginning of each file
+
+    /* Code Flow and Style Checks */
+    "noFallthroughCasesInSwitch": true,   // Prevent unintentional fallthrough in switch statements
+    "skipLibCheck": true,                 // Speed up compilation by skipping type checking of declaration files
+     "checkJs": false,
+    /* Optional: Cleaner Imports */
+    "baseUrl": "./",                      // Root for non-relative module resolution
+    "paths": {
+      "@/*": ["src/*"]
+    }
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist", 
+     "**/*.spec.ts",
+    "**/*.test.ts"
+  ]
+}
