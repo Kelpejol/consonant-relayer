@@ -22,7 +22,7 @@ FROM node:20-alpine AS builder
 
 # Install build dependencies
 RUN apk add --no-cache \
-    python3 \
+    python3a \
     make \
     g++ \
     git

@@ -40,7 +40,7 @@ const logger = createLogger('agent-registry');
 const AgentCardSchema = z.object({
   name: z.string().min(1, 'Name is required'),
   description: z.string(),
-  url: z.string().url('URL must be valid'),
+  url: z.url('URL must be valid'),
   version: z.string().min(1, 'Version is required'),
   protocolVersion: z.string().min(1, 'Protocol version is required'),
   capabilities: z.object({
@@ -110,7 +110,7 @@ export class AgentRegistryService {
       validated = AgentRegistrationRequestSchema.parse(request);
     } catch (error) {
       if (error instanceof z.ZodError) {
-        const errorMessages = error.errors.map((e) => `${e.path.join('.')}: ${e.message}`);
+        const errorMessages = error.issues.map((e) => `${e.path.join('.')}: ${e.message}`);
         const message = `Validation failed: ${errorMessages.join(', ')}`;
         
         logger.warn({ sourceIP, errors: errorMessages }, 'Invalid registration request');
