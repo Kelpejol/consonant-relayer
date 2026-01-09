@@ -1,0 +1,359 @@
+syntax = "proto3";
+
+package consonant.relayer.v1;
+
+import "google/protobuf/timestamp.proto";
+import "google/protobuf/struct.proto";
+
+// ===========================================================================
+// RelayerService - Bidirectional Streaming Service
+// ===========================================================================
+// This service establishes a single long-lived bidirectional gRPC stream
+// between the relayer (client) and the backend (server).
+//
+// Flow:
+// 1. Relayer connects → sends StreamInit
+// 2. Backend responds → sends StreamAck
+// 3. Relayer sends → Heartbeats, CommandResponses, Events
+// 4. Backend sends → Commands
+// 5. Either side can close gracefully with StreamClose
+// ===========================================================================
+
+service RelayerService {
+  // Opens a bidirectional stream for all communication
+  // Client (relayer) initiates connection and maintains it
+  // Server (backend) sends commands and receives events
+  rpc OpenStream(stream ClientMessage) returns (stream ServerMessage);
+}
+
+// ===========================================================================
+// CLIENT → SERVER MESSAGES (Relayer → Backend)
+// ===========================================================================
+
+message ClientMessage {
+  // Unique message ID for tracing (format: msg_timestamp_random)
+  string message_id = 1;
+  
+  // Timestamp when message was created
+  google.protobuf.Timestamp timestamp = 2;
+  
+  // Message payload (only one can be set)
+  oneof payload {
+    StreamInit init = 10;
+    Heartbeat heartbeat = 11;
+    CommandResponse command_response = 12;
+    Event event = 13;
+    StreamClose close = 14;
+  }
+}
+
+// Initial handshake message sent when stream opens
+message StreamInit {
+  // Cluster identity (from secret)
+  string cluster_id = 1;
+  
+  // Human-readable cluster name
+  string cluster_name = 2;
+  
+  // Kubernetes namespace where relayer is deployed
+  string namespace = 3;
+  
+  // Relayer version (semver)
+  string relayer_version = 4;
+  
+  // Kubernetes cluster version
+  string kubernetes_version = 5;
+  
+  // Optional cluster metadata
+  map<string, string> labels = 6;
+  
+  // Cluster region (e.g., us-west-2)
+  string region = 7;
+  
+  // Cluster environment (e.g., production, staging)
+  string environment = 8;
+}
+
+// Periodic heartbeat to keep stream alive and report health
+message Heartbeat {
+  // Monotonically increasing sequence number
+  uint64 sequence = 1;
+  
+  // Current health status
+  HealthStatus health = 2;
+  
+  // Number of commands currently executing
+  uint32 active_commands = 3;
+  
+  // Uptime in seconds
+  uint64 uptime_seconds = 4;
+}
+
+// Response to a command received from backend
+message CommandResponse {
+  // Command ID from the original Command message
+  string command_id = 1;
+  
+  // Execution status
+  CommandStatus status = 2;
+  
+  // Response data (JSON-serializable)
+  google.protobuf.Struct data = 3;
+  
+  // Error message if status is FAILED or TIMEOUT
+  string error = 4;
+  
+  // How long the command took to execute (milliseconds)
+  uint32 execution_duration_ms = 5;
+  
+  // Optional detailed error context
+  ErrorContext error_context = 6;
+}
+
+// Event emitted by relayer (agent lifecycle, pod changes, etc.)
+message Event {
+  // Unique event ID (format: evt_timestamp_random)
+  string event_id = 1;
+  
+  // Event type
+  EventType type = 2;
+  
+  // When the event occurred
+  google.protobuf.Timestamp timestamp = 3;
+  
+  // Event payload (JSON-serializable)
+  google.protobuf.Struct data = 4;
+  
+  // Resource that triggered the event
+  ResourceReference resource = 5;
+  
+  // Event severity
+  EventSeverity severity = 6;
+  
+  // Optional event metadata
+  map<string, string> metadata = 7;
+}
+
+// Graceful stream close message
+message StreamClose {
+  // Reason for closing
+  CloseReason reason = 1;
+  
+  // Human-readable message
+  string message = 2;
+  
+  // Whether this is a permanent shutdown
+  bool permanent = 3;
+}
+
+// ===========================================================================
+// SERVER → CLIENT MESSAGES (Backend → Relayer)
+// ===========================================================================
+
+message ServerMessage {
+  // Unique message ID for tracing
+  string message_id = 1;
+  
+  // Timestamp when message was created
+  google.protobuf.Timestamp timestamp = 2;
+  
+  // Message payload (only one can be set)
+  oneof payload {
+    StreamAck ack = 10;
+    Command command = 11;
+    ControlMessage control = 12;
+    StreamClose close = 13;
+  }
+}
+
+// Acknowledgment of StreamInit
+message StreamAck {
+  // Session ID assigned by backend (for correlation)
+  string session_id = 1;
+  
+  // Backend version
+  string backend_version = 2;
+  
+  // How often to send heartbeats (seconds)
+  uint32 heartbeat_interval_seconds = 3;
+  
+  // Whether the backend is ready to receive events
+  bool ready = 4;
+  
+  // Optional backend capabilities
+  repeated string capabilities = 5;
+}
+
+// Command sent from backend to relayer for execution
+message Command {
+  // Unique command ID (for correlation with response)
+  string command_id = 1;
+  
+  // Command type
+  CommandType type = 2;
+  
+  // Command parameters (JSON-serializable)
+  google.protobuf.Struct parameters = 3;
+  
+  // Timeout for command execution (seconds)
+  uint32 timeout_seconds = 4;
+  
+  // Command priority (higher = more urgent)
+  uint32 priority = 5;
+  
+  // Whether to retry on failure
+  bool retryable = 6;
+  
+  // Idempotency key (for retries)
+  string idempotency_key = 7;
+}
+
+// Control message for stream management
+message ControlMessage {
+  // Control message type
+  ControlMessageType type = 1;
+  
+  // Control payload
+  google.protobuf.Struct data = 2;
+}
+
+// ===========================================================================
+// SUPPORTING TYPES
+// ===========================================================================
+
+message HealthStatus {
+  // Overall health (true = healthy)
+  bool healthy = 1;
+  
+  // Uptime in seconds
+  uint64 uptime_seconds = 2;
+  
+  // Component health details
+  map<string, string> components = 3;
+  
+  // Last health check timestamp
+  google.protobuf.Timestamp last_check = 4;
+}
+
+message ErrorContext {
+  // Error code (e.g., K8S_API_ERROR, KAGENT_TIMEOUT)
+  string code = 1;
+  
+  // Stack trace (if available)
+  string stack_trace = 2;
+  
+  // Additional context
+  map<string, string> context = 3;
+}
+
+message ResourceReference {
+  // Resource kind (e.g., Agent, Pod, Deployment)
+  string kind = 1;
+  
+  // Resource API version
+  string api_version = 2;
+  
+  // Resource namespace
+  string namespace = 3;
+  
+  // Resource name
+  string name = 4;
+  
+  // Resource UID
+  string uid = 5;
+}
+
+// ===========================================================================
+// ENUMS
+// ===========================================================================
+
+enum CommandType {
+  COMMAND_TYPE_UNSPECIFIED = 0;
+  
+  // Agent operations
+  COMMAND_TYPE_DEPLOY_AGENT = 10;      // Deploy agent via Agent CRD
+  COMMAND_TYPE_DELETE_AGENT = 11;      // Delete Agent CRD
+  COMMAND_TYPE_INVOKE_AGENT = 12;      // Invoke agent via Kagent A2A
+  COMMAND_TYPE_LIST_AGENTS = 13;       // List Agent CRDs
+  COMMAND_TYPE_GET_AGENT = 14;         // Get single Agent CRD
+  COMMAND_TYPE_UPDATE_AGENT = 15;      // Update Agent CRD
+  
+  // Resource operations
+  COMMAND_TYPE_GET_RESOURCE = 20;      // Get K8s resource
+  COMMAND_TYPE_LIST_RESOURCES = 21;    // List K8s resources
+  COMMAND_TYPE_WATCH_RESOURCES = 22;   // Start watching resources
+  COMMAND_TYPE_STOP_WATCH = 23;        // Stop watching resources
+  
+  // Cluster operations
+  COMMAND_TYPE_GET_CLUSTER_INFO = 30;  // Get cluster metadata
+  COMMAND_TYPE_HEALTH_CHECK = 31;      // Perform health check
+  COMMAND_TYPE_GET_LOGS = 32;          // Get pod logs
+}
+
+enum EventType {
+  EVENT_TYPE_UNSPECIFIED = 0;
+  
+  // Agent lifecycle events
+  EVENT_TYPE_AGENT_CREATED = 10;
+  EVENT_TYPE_AGENT_UPDATED = 11;
+  EVENT_TYPE_AGENT_DELETED = 12;
+  EVENT_TYPE_AGENT_READY = 13;
+  EVENT_TYPE_AGENT_FAILED = 14;
+  EVENT_TYPE_AGENT_PROGRESSING = 15;
+  
+  // Pod lifecycle events
+  EVENT_TYPE_POD_CREATED = 20;
+  EVENT_TYPE_POD_UPDATED = 21;
+  EVENT_TYPE_POD_DELETED = 22;
+  EVENT_TYPE_POD_READY = 23;
+  EVENT_TYPE_POD_FAILED = 24;
+  EVENT_TYPE_POD_PENDING = 25;
+  
+  // Kubernetes events
+  EVENT_TYPE_K8S_EVENT = 30;
+  EVENT_TYPE_K8S_WARNING = 31;
+  EVENT_TYPE_K8S_ERROR = 32;
+  
+  // System events
+  EVENT_TYPE_SYSTEM_ERROR = 40;
+  EVENT_TYPE_SYSTEM_WARNING = 41;
+  EVENT_TYPE_SYSTEM_INFO = 42;
+  
+  // Stream events
+  EVENT_TYPE_STREAM_CONNECTED = 50;
+  EVENT_TYPE_STREAM_DISCONNECTED = 51;
+  EVENT_TYPE_STREAM_ERROR = 52;
+}
+
+enum CommandStatus {
+  COMMAND_STATUS_UNSPECIFIED = 0;
+  COMMAND_STATUS_SUCCESS = 1;
+  COMMAND_STATUS_FAILED = 2;
+  COMMAND_STATUS_TIMEOUT = 3;
+  COMMAND_STATUS_REJECTED = 4;      // Command was rejected (invalid params, etc.)
+  COMMAND_STATUS_RETRYING = 5;      // Command is being retried
+}
+
+enum EventSeverity {
+  EVENT_SEVERITY_UNSPECIFIED = 0;
+  EVENT_SEVERITY_INFO = 1;
+  EVENT_SEVERITY_WARNING = 2;
+  EVENT_SEVERITY_ERROR = 3;
+  EVENT_SEVERITY_CRITICAL = 4;
+}
+
+enum CloseReason {
+  CLOSE_REASON_UNSPECIFIED = 0;
+  CLOSE_REASON_SHUTDOWN = 1;        // Graceful shutdown
+  CLOSE_REASON_ERROR = 2;           // Error forced close
+  CLOSE_REASON_TIMEOUT = 3;         // Timeout/inactivity
+  CLOSE_REASON_BACKEND_REQUEST = 4; // Backend requested close
+}
+
+enum ControlMessageType {
+  CONTROL_MESSAGE_TYPE_UNSPECIFIED = 0;
+  CONTROL_MESSAGE_TYPE_PAUSE = 1;   // Pause event streaming
+  CONTROL_MESSAGE_TYPE_RESUME = 2;  // Resume event streaming
+  CONTROL_MESSAGE_TYPE_PING = 3;    // Ping request
+  CONTROL_MESSAGE_TYPE_PONG = 4;    // Ping response
+}
